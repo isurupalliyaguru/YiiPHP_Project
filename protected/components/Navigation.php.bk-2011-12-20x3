@@ -1,0 +1,130 @@
+<?php
+class Navigation extends CApplicationComponent
+{
+    public function init() {
+ 
+    }
+
+    public function getSubMenuItems($options_arr=array()) {
+	/*
+	pre	: called in the view file.
+			@param $options_arr - can be empty, see createHtmlLinks()
+	post: Returns the sub navigation of the page or FALSE if no sub nav items exist for this page ID.
+	*/
+		$this_pageid = Pagecontent::model()->getPageId();
+		if (!empty($this_pageid)) {
+			$row_sub_menus = PagemenuItems::model()->getMenuIdAndMenuName($this_pageid);
+			if (!empty($row_sub_menus))
+				$row_sub_menus_items = PagemenuItems::model()->getDbResult_SubMenuItems($row_sub_menus['menuid']);
+			else return false;
+			$sub_navigation = $this->createHtmlLinks($row_sub_menus_items, $this_pageid, false, $options_arr);
+			return $sub_navigation;
+		}
+		else return false;
+	}
+	public function getMainMenuItems($special_id_text='t1', $options_arr=array()) {
+	/*
+	pre	: 	This is called in the layout file main.php. 
+			@param $special_id_text is the template reference for this menu (default 't1', which is assumed to be the top nav menu)
+			@param $options_arr - can be empty, see createHtmlLinks()
+	post: 	Returns the main menu items, or FALSE if no menu items exist for this id reference.
+	*/
+		$this_pageid = Pagecontent::model()->getPageId();
+		$row_main_menu_items = PagemenuItems::model()->getMainMenuItems($special_id_text);
+		if (!empty($row_main_menu_items)) {
+			$this_parentpageid = Pagecontent::model()->getParentPageId(); 
+			$main_navigation = $this->createHtmlLinks($row_main_menu_items,$this_pageid,$this_parentpageid, $options_arr);
+			return $main_navigation;
+		}
+		else return false;
+	}
+	
+	protected function createHtmlLinks($row_menu_items,$this_pageid,$this_parentpageid=false, $options_arr) {
+	/*
+	pre	: 	@param $row_menu_items - database result array of menu items. Assume it is NOT empty (i.e. already checked that menu items exist).
+			@param $this_pageid - current page id, 
+			@param $this_parentpageid - set if we are building the main navigation, otherwise FALSE
+			@param $options_arr is a array which contains the options 'add_li_tag', 'separator', 'div_column_class' for the menu items.
+			@param $options_arr['add_li_tag'] - is true when we want to print a <li> for the menu item
+	post: 	Returns a concatenated string of HTML <a href> links for this menu. 
+	*/
+		
+		// call function checkOptionsArray() to set the default values when $options_arr is empty
+		$this->checkOptionsArray($options_arr);	
+		
+		$add_li_tag = (isset($options_arr['add_li_tag']) && $options_arr['add_li_tag'] ? true : false);
+		$navigation = ($add_li_tag ? "<ul>" : ""); //return result
+		$aux_http_url = Yii::app()->getBaseUrl(true);//http://www.ztest.3003online.com
+		if ($this_parentpageid) $this_pageid = $this_parentpageid; //make it this page ID for selection purposes
+		foreach ($row_menu_items as $menu_arr) {
+		
+			if (empty($menu_arr["menu_heading_override"]))	$aux_menu_heading = $menu_arr["menu_heading"];
+			else	$aux_menu_heading=$menu_arr["menu_heading_override"];
+				
+			$aux_use_target_blank= ($menu_arr["use_is_blank"] ? true : false);  //set from CMS, if this link should open in a new window
+			
+			if (empty($menu_arr["absolute_url"])) { //this is a content managed page
+				$url = $aux_http_url;
+				if ($menu_arr["sef_url"]!="home") $url .= '/' . $menu_arr["sef_url"] . '/'; //Yii::app()->createUrl($menu_arr["sef_url"] . '/');
+			}
+			else { //this is an absolute URL
+				if (strpos($menu_arr["absolute_url"], "http") !== false) $url = ""; //absolute URL has a http so it is an absolute link
+				else $url = $aux_http_url . "/"; //the absolute url is within this site (i.e. no "http")
+				$url .= $menu_arr["absolute_url"];
+			}
+			if (empty($menu_arr["titletag"])) $titletag=$menu_arr["html_h1"];
+			else $titletag = $menu_arr["titletag"];
+			$aux_menu_classname =  $this->getSelectedClassForMenuItem($this_pageid, $menu_arr); //gets "sel" if this item is selected
+			//also add any addon class (slug) into the class name
+			if (!empty($menu_arr['addon_class'])) { //add the class name to the link
+				$aux_menu_classname .= (empty($aux_menu_classname) ? "" : " "); //add a ' ' if there are multiple class names for this item, e.g. "sel aboutus"				
+				$aux_menu_classname .= $menu_arr['addon_class'];
+			}	
+			
+			$aux_alink = ($add_li_tag ? "<li>" : "") . "<a href=' " .$url. "' title='" .$titletag. "' " 
+				. (!empty($aux_menu_classname) ? "class='" . $aux_menu_classname . "' " : "") 
+				. ($aux_use_target_blank ? "target='_blank' " : "") . " >". $aux_menu_heading . "</a>" . ($add_li_tag ? "</li>" : "");				
+			if (isset($menu_arr['is_header']) && $menu_arr['is_header']=='1') $navigation .= "<h3>" . $aux_alink . "</h3>";
+			else $navigation .= $aux_alink;
+		}
+		$navigation .= ($add_li_tag ? "</ul>" : "");
+		return $navigation;
+	}
+	
+	protected function getSelectedClassForMenuItem($this_pageid, $menu_arr) {
+		/* 	
+		pre:	@param $this_pageid - current page id, 
+				@param $menu_arr is the menu data from createHtmlLinks()above
+				Assume this function is called from createHtmlLinks()
+		post: 	returns "sel" as the selected class for the <a href> menu item, if this menu item is in use.
+		*/
+
+		// this is an absolute url so simply check it against the sef_url if available
+		if ($menu_arr["absolute_url"] && !empty($_REQUEST['sef_url']))
+			return ($menu_arr["absolute_url"]==$_REQUEST['sef_url'] ? 'sel' : '');
+		else if ($menu_arr["absolute_url"] && !empty($menu_arr['sef_url']))
+			return ($menu_arr["absolute_url"]==$menu_arr['sef_url'] ? 'sel' : '');
+		else {
+			switch (Yii::app()->controller->id) { //the controller in use
+				case "pages":	//pages controller - use the $menu_arr pageid
+				case "places":
+				case "contact":
+					if (!empty($this_pageid)) return ($this_pageid == $menu_arr["pageid"] ? 'sel' : ''); // page id should not be empty
+					else return ""; // if the page id is not found do not select anything
+				/* For additional modules, add cases here */
+				case "portfolio":
+					return ($menu_arr["absolute_url"]=="portfolio/" ? 'sel' : '');
+			}
+		}
+
+		return ""; //default
+	}
+	
+	protected function checkOptionsArray(&$optionsarr) {
+	//post: if the parameter is empty, we set the default options array for the menu link functions below
+		if (empty($optionsarr)) {
+			$optionsarr = array('add_li_tag'=>true, 'separator'=>"", 'div_column_class'=>"");
+		}
+	}
+}
+?>

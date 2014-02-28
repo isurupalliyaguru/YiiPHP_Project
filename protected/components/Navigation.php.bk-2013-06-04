@@ -1,0 +1,135 @@
+<?php
+class Navigation extends CApplicationComponent
+{
+    public function init() {
+ 
+    }
+
+    public function getSubMenuItems($options_arr=array()) {
+		/*
+		pre	: called in the view file.
+		@param $options_arr - can be empty, see createHtmlLinks()
+		post: Returns the sub navigation of the page or FALSE if no sub nav items exist for this page ID.
+		*/
+		$this_pageid = Pagecontent::model()->getPageId();		
+		
+		if (!empty($this_pageid)) {
+			$row_sub_menus = PagemenuItems::model()->getMenuIdAndMenuName($this_pageid);
+			if (!empty($row_sub_menus))
+				$row_sub_menus_items = PagemenuItems::model()->getDbResult_SubMenuItems($row_sub_menus['menuid']);
+			else return false;
+			$sub_navigation = $this->createHtmlLinks($row_sub_menus_items,$this_pageid,false,$options_arr);
+			return $sub_navigation;
+		}
+		else return false;
+	}
+	
+    protected function getSelectedClassForMenuItem($this_pageid, $menu_arr) {
+		/* 	
+		pre:	@param $this_pageid - current page id, 
+				@param $menu_arr is the menu data from createHtmlLinks()above
+				Assume this function is called from createHtmlLinks()
+		post: 	returns "sel" as the selected class for the <a href> menu item, if this menu item is in use.
+		*/
+		
+		// this is an absolute url so simply check it against the sef_url if available
+		if ($menu_arr["absolute_url"] && !empty($_REQUEST['sef_url']))
+			return ($menu_arr["absolute_url"]==$_REQUEST['sef_url'] ? 'sel' : '');
+		else if ($menu_arr["absolute_url"] && !empty($menu_arr['sef_url']))
+			return ($menu_arr["absolute_url"]==$menu_arr['sef_url'] ? 'sel' : '');
+		else {
+			switch (Yii::app()->controller->id) { //the controller in use
+				case "pages":	//pages controller - use the $menu_arr pageid
+				case "contact":
+					if (!empty($this_pageid)) return ($this_pageid == $menu_arr["pageid"] ? 'sel' : ''); // page id should not be empty
+					else return ""; // if the page id is not found do not select anything
+				/* For additional modules, add cases here */
+				case "portfolio":
+					if (!empty($this_pageid)) return ($this_pageid == $menu_arr["pageid"] ? 'sel' : ''); // page id should not be empty
+					else return "";
+				case "contactus":
+					if (!empty($this_pageid)) return ($this_pageid == $menu_arr["pageid"] ? 'sel' : ''); // page id should not be empty
+					else return "";
+			}
+		}
+
+		return ""; //default
+	}
+	
+	public function getUrl($menuitem){
+		/*
+		 * pre:		@param $menuUrl array containing mene item properties
+		 * post:	returns the proccessed url
+		 */
+		$aux_http_url = Yii::app()->getBaseUrl(true); //http://dev.3003online.com
+		if (empty($menuitem["absolute_url"])) { //this is a content managed page
+			$url = $aux_http_url;
+			if ($menuitem["sef_url"]!="home") $url .= '/' . $menuitem["sef_url"] . '/'; //Yii::app()->createUrl($menu_arr["sef_url"] . '/');
+		}
+		else { //this is an absolute URL
+			if (strpos($menuitem["absolute_url"], "http") !== false) $url = ""; //absolute URL has a http so it is an absolute link
+			else $url = $aux_http_url . "/"; //the absolute url is within this site (i.e. no "http")
+			$url .= $menuitem["absolute_url"];
+		}
+		return $url;
+	}
+	
+	public function getSpecifiedMenus ($menuArr, $menuHTML, $menuItemHTML, $menuLinkHTML, $options_arr=''){
+		/* 	
+		pre:	@param $menuArr - string with menu special id text (t1, t2 etc)
+				@param $menuHTML - string with base wraping html tag (<ul>)
+				@param $menuItemHTML - string withwrapping secondary tag (<li>)
+				@param $menuLinkHTML - string containing anchor tag
+				@param $menuItemHTML_ext_classes - string special developer defined CSS class names
+		post: 	returns menu items array indexed by the special id text (t1, t2 etc)
+		*/
+		$this_pageid = Pagecontent::model()->getPageId(); // getting page ID
+		$this_parentpageid = Pagecontent::model()->getParentPageId(); // getting parent page ID
+		//getting the menu item set, according to the $menuArr string
+		if(isset($menuArr['result'])){
+			$Allmenu = $menuArr['dataset'];
+			unset($menuArr['dataset']);
+		}
+		else{
+		$Allmenu = PagemenuItems::model()->getAllMenuItemsBySpecialId($menuArr);
+		}
+		$arr =array();
+		foreach ($menuArr as $val) {
+			$items = "";
+			$row_count = count($Allmenu[$val]); // counting the number of menu items
+			$i = 0;
+			foreach ($Allmenu[$val] as $menuitem) {
+				$i++;
+				if (empty($menuitem["menu_heading_override"]))	$aux_menu_heading = $menuitem["menu_heading"];
+				else	$aux_menu_heading = $menuitem["menu_heading_override"];
+				$aux_use_target_blank= ($menuitem["use_is_blank"] ? true : false);  //set from CMS, if this link should open in a new window
+				$url = $this->getUrl($menuitem); // getting the purified url
+				if (empty($menuitem["titletag"])) $titletag=$menuitem["html_h1"];
+				else $titletag = $menuitem["titletag"];
+				
+				if (isset($menuitem['is_header']) && $menuitem['is_header']=='1') {
+					$aux_h3_open = "<h3>";
+					$aux_h3_close = "</h3>";
+				}
+				else {
+					$aux_h3_open = "";
+					$aux_h3_close = "";
+				}
+				$selected = $this->getSelectedClassForMenuItem($this_pageid, $menuitem); //gets "sel" if this item is selected
+				
+				if(empty($selected) && $this_parentpageid)
+					$selected = $this->getSelectedClassForMenuItem($this_parentpageid, $menuitem); //gets "sel" if parent is selected
+				
+				$pre_items = str_replace("#title#", $titletag, (str_replace ('#link#', $url, (str_replace ('#link_content#', $aux_menu_heading, (str_replace("#target#", ($aux_use_target_blank ? "target='_blank'" : ""), $menuLinkHTML))))))); // creating complete anchor tag
+				$aux_menu_classname = !empty($selected) ? $selected : ""; //gets the classes if selected
+				$aux_menu_classname .= (empty($menuitem['addon_class']) ? "" : (!empty($selected) ? " " . $menuitem['addon_class'] : $menuitem['addon_class'])); // getting the addon classes which are specified by CMS user hwn creating menu items
+				$aux_menu_classname .= (empty($options_arr['ext_classes']) ? "" : (!empty($aux_menu_classname) ? " ". $options_arr['ext_classes'] : $options_arr['ext_classes'])); // adding developer specified class from view
+		
+				$items .= str_replace('#class#', (!empty($aux_menu_classname) ? "class='".$aux_menu_classname."'" : ""), (str_replace ('#content#', ($aux_h3_open.$pre_items.$aux_h3_close), $menuItemHTML))); // making final menuitem tag with HTML
+				if($row_count !== $i) $items .= (!empty($options_arr['seperator']) ? $options_arr['seperator'] : ""); // if seperator html tag passed, appending after the menu iterm
+			}
+			$arr[$val] = str_replace ('#content#', $items, $menuHTML); // wrapping the final menuitems
+		}
+		return $arr;
+	}
+}

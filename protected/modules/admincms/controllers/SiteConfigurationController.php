@@ -1,0 +1,193 @@
+<?php
+
+class SiteConfigurationController extends Controller
+{
+	/**
+	 * @var string the default layout for the views. Defaults to '//layouts/column2', meaning
+	 * using two-column layout. See 'protected/views/layouts/column2.php'.
+	 */
+	public $layout='//layouts/column2';
+
+	/**
+	 * @return array action filters
+	 */
+	public function filters()
+	{
+		return array(
+			'accessControl', // perform access control for CRUD operations
+		);
+	}
+
+	/**
+	 * Specifies the access control rules.
+	 * This method is used by the 'accessControl' filter.
+	 * @return array access control rules
+	 */
+	public function accessRules()
+	{
+		$contentmn_name  = (!empty(Yii::app()->user->content_man_un) ? Yii::app()->user->content_man_un : "" );
+		if (Yii::app()->user->isGuest) {
+			return array(
+				array('allow',  // allow all users to perform 'sitemap' action
+					'actions'=>array('sitemap'), 
+					'users'=>array('*'),
+				),
+				array('deny',  // deny all users
+					'users'=>array('*'),
+				),				
+			);
+		}
+		else {
+			return array(
+				array('deny',  // allow all users to perform 'index' and 'view' actions
+					'actions'=>array('admin','delete'),
+					'users'=>array($contentmn_name),
+				),				
+			);
+		}
+	}
+
+	/**
+	 * Displays a particular model.
+	 * @param integer $id the ID of the model to be displayed
+	 */
+	public function actionView($id)
+	{
+		$this->render('view',array(
+			'model'=>$this->loadModel($id),
+		));
+	}
+
+	/**
+	 * Creates a new model.
+	 * If creation is successful, the browser will be redirected to the 'view' page.
+	 */
+	public function actionCreate()
+	{
+		$model=new SiteConfiguration;
+
+		// Uncomment the following line if AJAX validation is needed
+		// $this->performAjaxValidation($model);
+
+		if(isset($_POST['SiteConfiguration']))
+		{
+			$model->attributes=$_POST['SiteConfiguration'];
+			if($model->save())
+				$this->redirect(array('view','id'=>$model->configid));
+		}
+
+		$this->render('create',array(
+			'model'=>$model,
+		));
+	}
+
+	/**
+	 * Updates a particular model.
+	 * If update is successful, the browser will be redirected to the 'view' page.
+	 * @param integer $id the ID of the model to be updated
+	 */
+	public function actionUpdate($id)
+	{
+		$model=$this->loadModel($id);
+
+		// Uncomment the following line if AJAX validation is needed
+		// $this->performAjaxValidation($model);
+
+		if(isset($_POST['SiteConfiguration']))
+		{
+			$model->attributes=$_POST['SiteConfiguration'];
+			if($model->save()){
+				Yii::app()->user->setFlash('actionUpdate','Database was updated successfully');
+				$this->redirect(array('update','id'=>$model->configid));
+			}
+		}
+
+		$this->render('update',array(
+			'model'=>$model,
+		));
+	}
+
+	/**
+	 * Deletes a particular model.
+	 * If deletion is successful, the browser will be redirected to the 'index' page.
+	 * @param integer $id the ID of the model to be deleted
+	 */
+	public function actionDelete($id)
+	{
+		if(Yii::app()->request->isPostRequest)
+		{
+			// we only allow deletion via POST request
+			$this->loadModel($id)->delete();
+
+			// if AJAX request (triggered by deletion via admin grid view), we should not redirect the browser
+			if(!isset($_GET['ajax']))
+				$this->redirect(isset($_POST['returnUrl']) ? $_POST['returnUrl'] : array('admin'));
+		}
+		else
+			throw new CHttpException(400,'Invalid request. Please do not repeat this request again.');
+	}
+
+	/**
+	 * Lists all models.
+	 */
+	public function actionIndex()
+	{
+		$dataProvider=new CActiveDataProvider('SiteConfiguration');
+		$this->render('index',array(
+			'dataProvider'=>$dataProvider,
+		));
+	}
+
+	/**
+	 * Manages all models.
+	 */
+	public function actionAdmin()
+	{
+		$model=new SiteConfiguration('search');
+		$model->unsetAttributes();  // clear any default values
+		if(isset($_GET['SiteConfiguration']))
+			$model->attributes=$_GET['SiteConfiguration'];
+
+		$this->render('admin',array(
+			'model'=>$model,
+		));
+	}
+
+	public function actionSitemap() {
+		/*
+			pre: This function can be called from anywhere in the CMS, as it is independent of other functions
+			post: Generates a sitemap.xml if this option is enabled via the configuration file. At the moment this only checks the "pagecontent" table, but this will be expanded to use other tables as well (*TO DO*).
+		*/		
+		$model = new SiteConfiguration();
+		if(gIsModelEnabled("xmlsitemap")){			
+			$model->createSitemap();			
+		}
+	}
+	
+	
+	/**
+	 * Returns the data model based on the primary key given in the GET variable.
+	 * If the data model is not found, an HTTP exception will be raised.
+	 * @param integer the ID of the model to be loaded
+	 */
+	public function loadModel($id)
+	{
+		$model=SiteConfiguration::model()->findByPk((int)$id);
+		if($model===null)
+			throw new CHttpException(404,'The requested page does not exist.');
+		return $model;
+	}
+
+	/**
+	 * Performs the AJAX validation.
+	 * @param CModel the model to be validated
+	 */
+	protected function performAjaxValidation($model)
+	{
+		if(isset($_POST['ajax']) && $_POST['ajax']==='site-configuration-form')
+		{
+			echo CActiveForm::validate($model);
+			Yii::app()->end();
+		}
+	}
+}
