@@ -1,6 +1,6 @@
  <?php 
  class photoGallery extends CWidget { 
- //Class name should be defined with the same name which is in the /config/widget_category.xml
+ //Class name should be defined with the same name which is in the /config/widget_category.xml test etst
  //the following class variables should be passed with the same name, whereever this widget is called. 
  //E.g.   array('ItmName'=>'image category', 'confirmText'=>'image category','delete_item_id'=>'delete_page_id', 'delete_item_name'=>'delete_page_name')
  //Optional field 'ajaxAction'=>'adminCategory', 
